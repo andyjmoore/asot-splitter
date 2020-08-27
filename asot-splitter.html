@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<script>
+class CueTrack {
+  trackNumber;
+  title;
+  performer;
+  // startTime in mm:ss:ff (where mm can exceed 2 chars when going above 99m)
+  startTime = "00:00:00";
+  constructor(trackNumber, title, performer, startTime) {
+    this.trackNumber = trackNumber;
+	this.title = title;
+	this.performer = performer;
+	this.startTime = startTime;
+  }
+  
+  toCueText() {
+    let trackIndent = "  ";
+	let trackPropertiesIndent = trackIndent + "  ";
+	
+	let paddedTrackNumber = this.trackNumber.toString().padStart(2, '0');
+	
+    let cueText =  trackIndent + "TRACK " + paddedTrackNumber + " AUDIO";
+	let cueTitle = trackPropertiesIndent + "TITLE \"" + this.title + "\"";
+	let cuePerformer = trackPropertiesIndent + "PERFORMER \"" + this.performer + "\"";
+	let cueTrackIndex = trackPropertiesIndent + "INDEX 01 " + this.startTime;
+	return [cueText, cueTitle, cuePerformer, cueTrackIndex].join("\n");
+  }
+}
+
+var asotTracklistToCueSheetUtil = {
+  transform(event) {
+    console.log("transform");
+	let tracklistInput =  document.querySelector("textarea#tracklistInput");	
+	tracklistLines = tracklistInput.value.split(/\n/);
+	
+	let cueEntries = tracklistLines.map(this.tracklistLineToCueTrack);
+	let tracklistAsCue = cueEntries.map(entry => entry.toCueText()).join("\n");
+	
+	let cueOutput = document.querySelector("textarea#cueOutput");
+	cueOutput.value = tracklistAsCue;
+  },
+  
+  tracklistLineToCueTrack(tracklistLine, index) {
+    let cueTrack = new CueTrack(++index, "some title", "some performer", "01:02:03");
+    return cueTrack;
+  }
+};
+</script>
+</head>
+<body>
+<h1>A State of Trance - YouTube Tracklist to Cue Sheet</h1>
+<p>Take tracklist from YouTube episode details: <a href="https://www.youtube.com/channel/UCu5jfQcpRLm9xhmlSd5S8xw">Armin van Buuren YouTube channel</a></p>
+<label for="tracklistInput">Tracklist</label>
+<textarea id="tracklistInput"></textarea>
+<button id="transformButton" onclick="asotTracklistToCueSheetUtil.transform(event);">Transform</button>
+<label for="cueOutput">Cue sheet output</label>
+<textarea id="cueOutput"></textarea>
+</body>
+</html>
