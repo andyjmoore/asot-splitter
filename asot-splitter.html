@@ -2,6 +2,10 @@
 <html>
 <head>
 <meta charset="utf-8"/>
+<style>
+label, button {vertical-align: top;}
+textarea {width: 500px; height: 600px;}
+</style>
 <script>
 class CueTrack {
   trackNumber;
@@ -36,7 +40,7 @@ var asotTracklistToCueSheetUtil = {
 	let tracklistInput =  document.querySelector("textarea#tracklistInput");	
 	tracklistLines = tracklistInput.value.split(/\n/);
 	
-	let cueEntries = tracklistLines.map(this.tracklistLineToCueTrack);
+	let cueEntries = tracklistLines.map(asotTracklistToCueSheetUtil.tracklistLineToCueTrack);
 	let tracklistAsCue = cueEntries.map(entry => entry.toCueText()).join("\n");
 	
 	let cueOutput = document.querySelector("textarea#cueOutput");
@@ -44,8 +48,32 @@ var asotTracklistToCueSheetUtil = {
   },
   
   tracklistLineToCueTrack(tracklistLine, index) {
-    let cueTrack = new CueTrack(++index, "some title", "some performer", "01:02:03");
+    let parsedTrackLine = tracklistLine.match(/^\s*-?\s*(?<artist>[^-]+)\s*-\s*(?<title>[^-]*)\s*\((?<startTime>\d+:\d+:\d+)\)\s*$/i);
+	console.debug(parsedTrackLine);
+	if (!parsedTrackLine) {
+	  console.warn("No match for track line", tracklistLine);
+	  return null;
+	}
+	let artist = parsedTrackLine.groups.artist.trim();
+	let title = parsedTrackLine.groups.title.trim();
+	let startTimeHms = parsedTrackLine.groups.startTime.trim();
+	let startTimeMsf = asotTracklistToCueSheetUtil.convertTimeToCueMinSecFrame(startTimeHms);
+	
+    let cueTrack = new CueTrack(++index, title, artist, startTimeMsf);
     return cueTrack;
+  },
+  
+  convertTimeToCueMinSecFrame(timeStringInHourMinSec) {
+    let parsedTimeInHourMinSec = timeStringInHourMinSec.match(/(?<hours>\d{1,2}):(?<minutes>\d{1,2}):(?<seconds>\d{1,2})/i);
+	let parsedHours = Number.parseInt(parsedTimeInHourMinSec.groups.hours);
+	let parsedMinutes = Number.parseInt(parsedTimeInHourMinSec.groups.minutes);
+	let parsedSeconds = Number.parseInt(parsedTimeInHourMinSec.groups.seconds);
+	
+	// Cue timestamps don't have hours in, so add hours as extra minutes
+	let cueMinutes = parsedHours*60 + parsedMinutes;
+	let defaultFrame = "00"; // Don't need granularity down to frames, just leave as zero
+	
+	return cueMinutes.toString().padStart(2, '0') + ":" + parsedSeconds.toString().padStart(2, '0') + ":" + defaultFrame;
   }
 };
 </script>
