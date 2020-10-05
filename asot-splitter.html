@@ -5,14 +5,64 @@
 <style>
 label, button {vertical-align: top;}
 textarea {width: 500px; height: 600px;}
+.simpleFormLayout {
+  display: grid;
+  grid-template-columns: 150px 50px;
+  row-gap: 5px;
+}
 </style>
 <script>
+
+var asotAwardPatterns = [
+  /(PROGRESSIVE PICK): /,
+  /(TUNE OF THE WEEK): /,
+  /(SERVICE FOR DREAMERS): /,
+  /(FUTURE FAVORITE): /,
+  /(TRENDING TRACK): /
+]
+  
+
+class CueHeader {
+  genre;
+  year;
+  title;
+  file;
+  fileType;
+
+  constructor(genre, year, title, file, fileType) {
+    this.genre = genre;
+	this.year = year;
+	this.title = title;
+	this.file = file;
+	this.fileType = fileType;
+  }
+  
+  // Sets file to the title, with a WAV extension and type
+  /*
+  constructor(genre, year, title) {
+    this.genre = genre;
+	this.year = year;
+	this.title = title;
+	this.file = title + ".wav";
+	this.fileType = "WAVE";
+  }
+  */
+  
+  toCueText() {
+    let genreText = "REM GENRE " + this.genre;
+	let dateText = "REM DATE " + this.year;
+	let titleText = "TITLE \"" + this.title + "\"";
+	let fileText = "FILE \"" + this.file + "\" " + this.fileType;	
+	return [genreText,dateText,titleText,fileText].join("\n");
+  }
+}
+
 class CueTrack {
   trackNumber;
   title;
   performer;
-  // startTime in mm:ss:ff (where mm can exceed 2 chars when going above 99m)
-  startTime = "00:00:00";
+  startTime = "00:00:00"; // startTime in mm:ss:ff (where mm can exceed 2 chars when going above 99m)
+  
   constructor(trackNumber, title, performer, startTime) {
     this.trackNumber = trackNumber;
 	this.title = title;
@@ -26,29 +76,58 @@ class CueTrack {
 	
 	let paddedTrackNumber = this.trackNumber.toString().padStart(2, '0');
 	
+	// check for awards and modify if found
+	let foundAwardMatch = false;
+	let awardPatternsIterator = asotAwardPatterns[Symbol.iterator]();
+	for (var awardsIndex = 0; awardsIndex < asotAwardPatterns.length && !foundAwardMatch; awardsIndex++) {
+	  let awardPatternMatchResult = this.performer.match(asotAwardPatterns[awardsIndex]);
+	  if (awardPatternMatchResult) {
+	    let fullMatchInPerformer = awardPatternMatchResult[0];
+		let matchedAwardText = awardPatternMatchResult[1];
+		this.title = this.title + " [" + matchedAwardText + "]";
+		this.performer = this.performer.replace(fullMatchInPerformer, "");
+		foundAwardMatch = true;
+      }	  
+	}
+	
     let cueText =  trackIndent + "TRACK " + paddedTrackNumber + " AUDIO";
 	let cueTitle = trackPropertiesIndent + "TITLE \"" + this.title + "\"";
 	let cuePerformer = trackPropertiesIndent + "PERFORMER \"" + this.performer + "\"";
 	let cueTrackIndex = trackPropertiesIndent + "INDEX 01 " + this.startTime;
+	
 	return [cueText, cueTitle, cuePerformer, cueTrackIndex].join("\n");
   }
+  
 }
 
 var asotTracklistToCueSheetUtil = {
   transform(event) {
     console.log("transform");
+	
+	let cueHeader = this.createCueHeader();
+	
 	let tracklistInput =  document.querySelector("textarea#tracklistInput");	
 	tracklistLines = tracklistInput.value.split(/\n/);
 	
 	let cueEntries = tracklistLines.map(asotTracklistToCueSheetUtil.tracklistLineToCueTrack);
 	let tracklistAsCue = cueEntries.map(entry => entry.toCueText()).join("\n");
 	
+	let cueOutputText = [cueHeader.toCueText(), tracklistAsCue].join("\n");
 	let cueOutput = document.querySelector("textarea#cueOutput");
-	cueOutput.value = tracklistAsCue;
+	cueOutput.value = cueOutputText;
+  },
+  
+  createCueHeader() {
+    let episodeNumber = document.getElementById("episodeNumberInput").value;
+	let year = document.getElementById("yearInput").value;
+	let episodeName = "A State Of Trance Episode " + episodeNumber;
+	let fileName = episodeName + ".wav";
+	let cueHeader = new CueHeader("Trance", year, episodeName, fileName, "WAVE");
+	return cueHeader;
   },
   
   tracklistLineToCueTrack(tracklistLine, index) {
-    let parsedTrackLine = tracklistLine.match(/^\s*-?\s*(?<artist>[^-]+)\s*-\s*(?<title>[^-]*)\s*\((?<startTime>\d+:\d+:\d+)\)\s*$/i);
+    let parsedTrackLine = tracklistLine.match(/^\s*-?\s*(?<artist>.+)\s+-\s+(?<title>.*)\s*\((?<startTime>\d+:\d+:\d+)\)\s*$/i);
 	console.debug(parsedTrackLine);
 	if (!parsedTrackLine) {
 	  console.warn("No match for track line", tracklistLine);
@@ -74,17 +153,35 @@ var asotTracklistToCueSheetUtil = {
 	let defaultFrame = "00"; // Don't need granularity down to frames, just leave as zero
 	
 	return cueMinutes.toString().padStart(2, '0') + ":" + parsedSeconds.toString().padStart(2, '0') + ":" + defaultFrame;
+  },
+  
+  initialiseFields() {
+    let yearInput = document.getElementById("yearInput");
+	yearInput.value = new Date().getFullYear();
   }
 };
+
+window.document.addEventListener("DOMContentLoaded", (event) => {
+  asotTracklistToCueSheetUtil.initialiseFields();
+});
+
 </script>
 </head>
 <body>
 <h1>A State of Trance - YouTube Tracklist to Cue Sheet</h1>
 <p>Take tracklist from YouTube episode details: <a href="https://www.youtube.com/channel/UCu5jfQcpRLm9xhmlSd5S8xw">Armin van Buuren YouTube channel</a></p>
+<fieldset class="simpleFormLayout">
+<label for="episodeNumberInput">Episode number</label>
+<input type="text" id="episodeNumberInput"></input>
+<label for="yearInput">Year</label>
+<input type="text" id="yearInput"></input>
+</fieldset>
+<fieldset>
 <label for="tracklistInput">Tracklist</label>
 <textarea id="tracklistInput"></textarea>
 <button id="transformButton" onclick="asotTracklistToCueSheetUtil.transform(event);">Transform</button>
 <label for="cueOutput">Cue sheet output</label>
 <textarea id="cueOutput"></textarea>
+</fieldset>
 </body>
 </html>
