@@ -101,6 +101,10 @@ class CueTrack {
 }
 
 var asotTracklistToCueSheetUtil = {
+  trackEntryPatterns: [
+    /^\s*-?\s*(?<artist>.+)\s+-\s+(?<title>.*)\s*\((?<startTime>(\d+:)?\d+:\d+)\)\s*$/i,
+    /^(?<startTime>(\d+:)?\d+:\d+)\s*-?\s*(?<artist>.+)\s+-\s+(?<title>.*)\s*$/i
+  ],
   transform(event) {
     console.log("transform");
 	
@@ -127,10 +131,17 @@ var asotTracklistToCueSheetUtil = {
   },
   
   tracklistLineToCueTrack(tracklistLine, index) {
-    let parsedTrackLine = tracklistLine.match(/^\s*-?\s*(?<artist>.+)\s+-\s+(?<title>.*)\s*\((?<startTime>\d+:\d+:\d+)\)\s*$/i);
+    let matchingTracklistLinePattern = asotTracklistToCueSheetUtil.trackEntryPatterns.find(pattern => tracklistLine.match(pattern) != null);
+	if (matchingTracklistLinePattern != null) {
+	  console.debug("Found matching pattern", {matchingTracklistLinePattern});
+	} else {
+	  console.error("No matching pattern for tracklist line", {tracklistLine});
+	  return null;
+	}
+    let parsedTrackLine = tracklistLine.match(matchingTracklistLinePattern);
 	console.debug(parsedTrackLine);
 	if (!parsedTrackLine) {
-	  console.warn("No match for track line", tracklistLine);
+	  console.warn("No match for track line", {tracklistLine});
 	  return null;
 	}
 	let artist = parsedTrackLine.groups.artist.trim();
@@ -143,8 +154,11 @@ var asotTracklistToCueSheetUtil = {
   },
   
   convertTimeToCueMinSecFrame(timeStringInHourMinSec) {
-    let parsedTimeInHourMinSec = timeStringInHourMinSec.match(/(?<hours>\d{1,2}):(?<minutes>\d{1,2}):(?<seconds>\d{1,2})/i);
-	let parsedHours = Number.parseInt(parsedTimeInHourMinSec.groups.hours);
+    let parsedTimeInHourMinSec = timeStringInHourMinSec.match(/((?<hours>\d{1,2}):)?(?<minutes>\d{1,2}):(?<seconds>\d{1,2})/i);
+	let parsedHours = 0;
+	if (typeof parsedTimeInHourMinSec.groups.hours !== 'undefined') {
+	  parsedHours = Number.parseInt(parsedTimeInHourMinSec.groups.hours);
+	}
 	let parsedMinutes = Number.parseInt(parsedTimeInHourMinSec.groups.minutes);
 	let parsedSeconds = Number.parseInt(parsedTimeInHourMinSec.groups.seconds);
 	
