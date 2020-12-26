@@ -31,29 +31,41 @@ class CueHeader {
 
   constructor(genre, year, title, file, fileType) {
     this.genre = genre;
-	this.year = year;
-	this.title = title;
-	this.file = file;
-	this.fileType = fileType;
+    this.year = year;
+    this.title = title;
+    this.file = file;
+    this.fileType = fileType;
   }
   
   // Sets file to the title, with a WAV extension and type
   /*
   constructor(genre, year, title) {
     this.genre = genre;
-	this.year = year;
-	this.title = title;
-	this.file = title + ".wav";
-	this.fileType = "WAVE";
+  this.year = year;
+  this.title = title;
+  this.file = title + ".wav";
+  this.fileType = "WAVE";
   }
   */
   
   toCueText() {
     let genreText = "REM GENRE " + this.genre;
-	let dateText = "REM DATE " + this.year;
-	let titleText = "TITLE \"" + this.title + "\"";
-	let fileText = "FILE \"" + this.file + "\" " + this.fileType;	
-	return [genreText,dateText,titleText,fileText].join("\n");
+    let dateText = "REM DATE " + this.year;
+    let titleText = "TITLE \"" + this.title + "\"";
+    let fileText = "FILE \"" + this.file + "\" " + this.fileType;	
+    return [genreText,dateText,titleText,fileText].join("\n");
+  }
+}
+
+class CueSheet {
+  sheetNumber; // 1-based index
+  cueHeader;
+  cueTracks;
+  
+  constructor(sheetNumber, cueHeader, cueTracks) {
+    this.sheetNumber = sheetNumber;
+    this.cueHeader = cueHeader;
+    this.cueTracks = cueTracks;
   }
 }
 
@@ -61,43 +73,55 @@ class CueTrack {
   trackNumber;
   title;
   performer;
-  startTime = "00:00:00"; // startTime in mm:ss:ff (where mm can exceed 2 chars when going above 99m)
+  startTimeInSeconds;
+  startTimeOffset = 0; // Offset from where to calculate this CUE track's CUE entry start-time
   
-  constructor(trackNumber, title, performer, startTime) {
+  constructor(trackNumber, title, performer, startTimeInSeconds, startTimeOffset) {
     this.trackNumber = trackNumber;
-	this.title = title;
-	this.performer = performer;
-	this.startTime = startTime;
+    this.title = title;
+    this.performer = performer;
+    this.startTimeInSeconds = startTimeInSeconds;
+    this.startTimeOffset = startTimeOffset;
   }
   
   toCueText() {
     let trackIndent = "  ";
-	let trackPropertiesIndent = trackIndent + "  ";
-	
-	let paddedTrackNumber = this.trackNumber.toString().padStart(2, '0');
-	
-	// check for awards and modify if found
-	let foundAwardMatch = false;
-	let awardPatternsIterator = asotAwardPatterns[Symbol.iterator]();
-	for (var awardsIndex = 0; awardsIndex < asotAwardPatterns.length && !foundAwardMatch; awardsIndex++) {
-	  let awardPatternMatchResult = this.performer.match(asotAwardPatterns[awardsIndex]);
-	  if (awardPatternMatchResult) {
-	    let fullMatchInPerformer = awardPatternMatchResult[0];
-		let matchedAwardText = awardPatternMatchResult[1];
-		this.title = this.title + " [" + matchedAwardText + "]";
-		this.performer = this.performer.replace(fullMatchInPerformer, "");
-		foundAwardMatch = true;
+    let trackPropertiesIndent = trackIndent + "  ";
+    
+    let paddedTrackNumber = this.trackNumber.toString().padStart(2, '0');
+    
+    // check for awards and modify if found
+    let foundAwardMatch = false;
+    let awardPatternsIterator = asotAwardPatterns[Symbol.iterator]();
+    for (var awardsIndex = 0; awardsIndex < asotAwardPatterns.length && !foundAwardMatch; awardsIndex++) {
+      let awardPatternMatchResult = this.performer.match(asotAwardPatterns[awardsIndex]);
+      if (awardPatternMatchResult) {
+        let fullMatchInPerformer = awardPatternMatchResult[0];
+        let matchedAwardText = awardPatternMatchResult[1];
+        this.title = this.title + " [" + matchedAwardText + "]";
+        this.performer = this.performer.replace(fullMatchInPerformer, "");
+        foundAwardMatch = true;
       }	  
-	}
-	
-    let cueText =  trackIndent + "TRACK " + paddedTrackNumber + " AUDIO";
-	let cueTitle = trackPropertiesIndent + "TITLE \"" + this.title + "\"";
-	let cuePerformer = trackPropertiesIndent + "PERFORMER \"" + this.performer + "\"";
-	let cueTrackIndex = trackPropertiesIndent + "INDEX 01 " + this.startTime;
-	
-	return [cueText, cueTitle, cuePerformer, cueTrackIndex].join("\n");
-  }
+    }
   
+    let cueText =  trackIndent + "TRACK " + paddedTrackNumber + " AUDIO";
+    let cueTitle = trackPropertiesIndent + "TITLE \"" + this.title + "\"";
+    let cuePerformer = trackPropertiesIndent + "PERFORMER \"" + this.performer + "\"";
+    let cueTrackIndex = trackPropertiesIndent + "INDEX 01 " + this.getStartTimeInCueMinSecFrame();
+  
+    return [cueText, cueTitle, cuePerformer, cueTrackIndex].join("\n");
+  }
+
+  getStartTimeInCueMinSecFrame() {
+    // convert to CUE startTime in mm:ss:ff (where mm can exceed 2 chars when going above 99m)
+    let offsetStartTime = this.startTimeInSeconds - this.startTimeOffset;
+    let cueMinutes = Math.floor(offsetStartTime / 60);
+    let cueSeconds = offsetStartTime % 60;
+    
+    let defaultFrame = "00"; // Don't need granularity down to frames, just leave as zero
+    
+    return cueMinutes.toString().padStart(2, '0') + ":" + cueSeconds.toString().padStart(2, '0') + ":" + defaultFrame;
+  }
 }
 
 var asotTracklistToCueSheetUtil = {
@@ -105,73 +129,110 @@ var asotTracklistToCueSheetUtil = {
     /^\s*-?\s*(?<artist>.+)\s+-\s+(?<title>.*)\s*\((?<startTime>(\d+:)?\d+:\d+)\)\s*$/i,
     /^(?<startTime>(\d+:)?\d+:\d+)\s*-?\s*(?<artist>.+)\s+-\s+(?<title>.*)\s*$/i
   ],
+
   transform(event) {
     console.log("transform");
-	
-	let cueHeader = this.createCueHeader();
-	
-	let tracklistInput =  document.querySelector("textarea#tracklistInput");	
-	tracklistLines = tracklistInput.value.split(/\n/);
-	
-	let cueEntries = tracklistLines.map(asotTracklistToCueSheetUtil.tracklistLineToCueTrack);
-	let tracklistAsCue = cueEntries.map(entry => entry.toCueText()).join("\n");
-	
-	let cueOutputText = [cueHeader.toCueText(), tracklistAsCue].join("\n");
-	let cueOutput = document.querySelector("textarea#cueOutput");
-	cueOutput.value = cueOutputText;
+    
+    let tracklistInput =  document.querySelector("textarea#tracklistInput");	
+    tracklistLines = tracklistInput.value.split(/\n/);
+    
+    let outputLines = [];
+    let cueSheets = asotTracklistToCueSheetUtil.tracklistLinesToCueSheets(tracklistLines);
+    let cueSheetIndex = 0;
+    cueSheets.forEach(function(cueSheet, index) {
+      if (index > 0) {
+        outputLines.push("====/ Split CUE sheet : sheet number " + cueSheet.sheetNumber + " : Track offset " + cueSheet.cueTracks[0].startTimeOffset + " \====");
+      }
+      let cueEntries = cueSheet.cueTracks;
+      let tracklistAsCue = cueEntries.map(entry => entry.toCueText()).join("\n");
+      outputLines.push(cueSheet.cueHeader.toCueText());
+      outputLines.push(tracklistAsCue);
+    });
+    
+    let cueOutput = document.querySelector("textarea#cueOutput");
+    cueOutput.value = outputLines.join("\n");
+  },
+
+  tracklistLinesToCueSheets(tracklistLines) {
+    const MAX_CUE_SHEET_DURATION_IN_SECONDS = 7500; // 2h5m
+    let cueTracks = [];
+    let cueSheetNumber = 1;
+    let currentCueSheet = new CueSheet(cueSheetNumber, asotTracklistToCueSheetUtil.createCueHeader(), cueTracks);
+    let cueSheets = [];
+
+    let trackIndex = 0;
+    let offsetInSeconds = 0;	
+
+    for (const tracklistLine of tracklistLines) {
+      let cueTrack = asotTracklistToCueSheetUtil.tracklistLineToCueTrack(tracklistLine, ++trackIndex, offsetInSeconds);
+      if ((cueTrack.startTimeInSeconds - cueTrack.startTimeOffset) > MAX_CUE_SHEET_DURATION_IN_SECONDS) {
+        cueSheets.push(currentCueSheet);
+        cueSheetNumber++;
+        trackIndex = 1;
+        offsetInSeconds = cueTrack.startTimeInSeconds;
+        // Re-parse the current cue track now we know it needs to be a in new sheet, with the offset
+        cueTrack = asotTracklistToCueSheetUtil.tracklistLineToCueTrack(tracklistLine, trackIndex, offsetInSeconds);
+        cueTracks = [cueTrack];
+        currentCueSheet = new CueSheet(cueSheetNumber, asotTracklistToCueSheetUtil.createCueHeader(cueSheetNumber), cueTracks);
+      } else {
+        cueTracks.push(cueTrack);
+      }
+    }
+
+    if (cueSheets.length <  cueSheetNumber) {
+      cueSheets.push(currentCueSheet);
+    }
+    return cueSheets;
   },
   
-  createCueHeader() {
+  createCueHeader(sheetNumber = 0) {
     let episodeNumber = document.getElementById("episodeNumberInput").value;
-	let year = document.getElementById("yearInput").value;
-	let episodeName = "A State Of Trance Episode " + episodeNumber;
-	let fileName = episodeName + ".wav";
-	let cueHeader = new CueHeader("Trance", year, episodeName, fileName, "WAVE");
-	return cueHeader;
+    let year = document.getElementById("yearInput").value;
+    let episodeName = "A State Of Trance Episode " + episodeNumber;
+    let fileName = episodeName + ((sheetNumber > 0) ? (" pt" + sheetNumber) : '') + ".wav";
+    let cueHeader = new CueHeader("Trance", year, episodeName, fileName, "WAVE");
+    return cueHeader;
   },
   
-  tracklistLineToCueTrack(tracklistLine, index) {
+  tracklistLineToCueTrack(tracklistLine, trackNumber, offsetInSeconds) {
     let matchingTracklistLinePattern = asotTracklistToCueSheetUtil.trackEntryPatterns.find(pattern => tracklistLine.match(pattern) != null);
-	if (matchingTracklistLinePattern != null) {
-	  console.debug("Found matching pattern", {matchingTracklistLinePattern});
-	} else {
-	  console.error("No matching pattern for tracklist line", {tracklistLine});
-	  return null;
-	}
+    if (matchingTracklistLinePattern != null) {
+      console.debug("Found matching pattern", {matchingTracklistLinePattern});
+    } else {
+      console.error("No matching pattern for tracklist line", {tracklistLine});
+      return null;
+    }
     let parsedTrackLine = tracklistLine.match(matchingTracklistLinePattern);
-	console.debug(parsedTrackLine);
-	if (!parsedTrackLine) {
-	  console.warn("No match for track line", {tracklistLine});
-	  return null;
-	}
-	let artist = parsedTrackLine.groups.artist.trim();
-	let title = parsedTrackLine.groups.title.trim();
-	let startTimeHms = parsedTrackLine.groups.startTime.trim();
-	let startTimeMsf = asotTracklistToCueSheetUtil.convertTimeToCueMinSecFrame(startTimeHms);
-	
-    let cueTrack = new CueTrack(++index, title, artist, startTimeMsf);
+    console.debug(parsedTrackLine);
+    if (!parsedTrackLine) {
+      console.warn("No match for track line", {tracklistLine});
+      return null;
+    }
+    let artist = parsedTrackLine.groups.artist.trim();
+    let title = parsedTrackLine.groups.title.trim();
+    let startTimeHms = parsedTrackLine.groups.startTime.trim();
+    let startTimeInSeconds = asotTracklistToCueSheetUtil.parseStartTime(startTimeHms);
+
+    let cueTrack = new CueTrack(trackNumber, title, artist, startTimeInSeconds, offsetInSeconds);
     return cueTrack;
   },
   
-  convertTimeToCueMinSecFrame(timeStringInHourMinSec) {
+  parseStartTime(timeStringInHourMinSec) {
     let parsedTimeInHourMinSec = timeStringInHourMinSec.match(/((?<hours>\d{1,2}):)?(?<minutes>\d{1,2}):(?<seconds>\d{1,2})/i);
-	let parsedHours = 0;
-	if (typeof parsedTimeInHourMinSec.groups.hours !== 'undefined') {
-	  parsedHours = Number.parseInt(parsedTimeInHourMinSec.groups.hours);
-	}
-	let parsedMinutes = Number.parseInt(parsedTimeInHourMinSec.groups.minutes);
-	let parsedSeconds = Number.parseInt(parsedTimeInHourMinSec.groups.seconds);
-	
-	// Cue timestamps don't have hours in, so add hours as extra minutes
-	let cueMinutes = parsedHours*60 + parsedMinutes;
-	let defaultFrame = "00"; // Don't need granularity down to frames, just leave as zero
-	
-	return cueMinutes.toString().padStart(2, '0') + ":" + parsedSeconds.toString().padStart(2, '0') + ":" + defaultFrame;
+    let parsedHours = 0;
+    if (typeof parsedTimeInHourMinSec.groups.hours !== 'undefined') {
+      parsedHours = Number.parseInt(parsedTimeInHourMinSec.groups.hours);
+    }
+    let parsedMinutes = Number.parseInt(parsedTimeInHourMinSec.groups.minutes);
+    let parsedSeconds = Number.parseInt(parsedTimeInHourMinSec.groups.seconds);
+    
+    let timeInSeconds = (parsedHours * (60 * 60)) + (parsedMinutes * 60) + parsedSeconds;    
+    return timeInSeconds;
   },
   
   initialiseFields() {
     let yearInput = document.getElementById("yearInput");
-	yearInput.value = new Date().getFullYear();
+    yearInput.value = new Date().getFullYear();
   }
 };
 
