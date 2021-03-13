@@ -2,7 +2,7 @@
 Takes ASOT episodes from the Youtube channel, and converts the tracklist into a cue sheet for splitting up into separate audio tracks.
 Tools used:
 - 4K YouTube To MP3 - rips the YouTube vid to mp3
-- Audacity - for UI layer on saving the ripped mp3 to WAV
+- Audacity - for UI layer on saving the ripped mp3 to WAV. !! Make sure the sampling rate is set to 44100 before exporting, otherwise CUETools will complain later!
 - this util - convert the YouTube vid details tracklist format to the cue sheet format
 - CUETools - spitting the ripped WAV per the cue sheet
 

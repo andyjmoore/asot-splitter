@@ -208,9 +208,9 @@ var asotTracklistToCueSheetUtil = {
       console.warn("No match for track line", {tracklistLine});
       return null;
     }
-    let artist = parsedTrackLine.groups.artist.trim();
-    let title = parsedTrackLine.groups.title.trim();
-    let startTimeHms = parsedTrackLine.groups.startTime.trim();
+    let artist = asotTracklistToCueSheetUtil.trimTracklistString(parsedTrackLine.groups.artist);
+    let title = asotTracklistToCueSheetUtil.trimTracklistString(parsedTrackLine.groups.title);
+    let startTimeHms = asotTracklistToCueSheetUtil.trimTracklistString(parsedTrackLine.groups.startTime);
     let startTimeInSeconds = asotTracklistToCueSheetUtil.parseStartTime(startTimeHms);
 
     let cueTrack = new CueTrack(trackNumber, title, artist, startTimeInSeconds, offsetInSeconds);
@@ -230,6 +230,15 @@ var asotTracklistToCueSheetUtil = {
     return timeInSeconds;
   },
   
+  /*
+   * The tracklists on the AvB YouTube vids seem to contain some hidden space chars - maybe due to the editor they create the tracklist text in then paste into the YouTube config for the vid?
+   * Trim that out here.
+   * Ref: https://stackoverflow.com/questions/24205193/javascript-remove-zero-width-space-unicode-8203-from-string
+   */
+  trimTracklistString(tracklistString) {
+    let stringWithZeroWidthSpaceRemoved = tracklistString.replace(/\u200b/g,'');
+    return stringWithZeroWidthSpaceRemoved.trim();
+  },  
   initialiseFields() {
     let yearInput = document.getElementById("yearInput");
     yearInput.value = new Date().getFullYear();
